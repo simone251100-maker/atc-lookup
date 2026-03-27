@@ -10,92 +10,90 @@
     <style>
         :root { --bg: #000; --card: #1c1c1e; --primary: #0a84ff; --success: #30d158; --text: #fff; }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: env(safe-area-inset-top) 15px 20px 15px; }
-        .header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 15px 0; z-index: 10; }
-        .search-box { display: flex; gap: 8px; }
+        .header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 15px 0; z-index: 10; border-bottom: 1px solid #222; }
+        .search-box { display: flex; gap: 8px; margin-top: 10px; }
         input { flex: 1; padding: 16px; border-radius: 12px; border: 1px solid #333; background: var(--card); color: #fff; font-size: 18px; outline: none; -webkit-appearance: none; }
         input:focus { border-color: var(--primary); }
         .btn-clear { padding: 0 15px; background: #2c2c2e; border: none; border-radius: 12px; color: #8e8e93; font-weight: 600; }
-        
-        /* Card migliorata per lettura rapida */
-        .card { background: var(--card); padding: 18px; border-radius: 16px; margin-bottom: 10px; border-left: 6px solid #333; transition: border 0.2s; }
-        .match-icao { border-left-color: var(--primary); background: #1c2530; } /* Evidenzia il match esatto */
-        
+        .card { background: var(--card); padding: 18px; border-radius: 16px; margin-bottom: 10px; border-left: 6px solid #333; }
+        .match-exact { border-left-color: var(--primary); background: #1c2530; }
         .company { font-size: 12px; color: #8e8e93; text-transform: uppercase; margin-bottom: 2px; }
-        .icao { font-size: 28px; font-weight: 900; font-family: monospace; color: var(--primary); }
-        .callsign { font-size: 19px; color: var(--success); font-weight: 600; margin-top: 4px; }
-        .no-results { text-align: center; color: #444; margin-top: 30px; }
+        .icao-code { font-size: 30px; font-weight: 900; font-family: monospace; color: var(--primary); }
+        .callsign { font-size: 20px; color: var(--success); font-weight: 700; margin-top: 4px; }
+        .info-db { font-size: 10px; color: #444; text-align: right; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h2 style="margin:5px 0 15px 0">✈️ ATC Radar</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2 style="margin:0">✈️ ATC Radar</h2>
+            <div id="stat" class="info-db">Loading...</div>
+        </div>
         <div class="search-box">
-            <input type="text" id="search" placeholder="Inserisci ICAO (es. ITY)" autocomplete="off" oninput="filtraDati()">
-            <button class="btn-clear" onclick="pulisci()">Reset</button>
+            <input type="text" id="search" placeholder="Cerca ICAO (es. RYR)" autocomplete="off" oninput="runSearch()">
+            <button class="btn-clear" onclick="resetSearch()">Reset</button>
         </div>
     </div>
 
     <div id="results"></div>
 
     <script>
-        let database = [];
+        let db = [];
 
         async function init() {
             try {
-                const res = await fetch('data.json');
-                database = await res.json();
-                console.log("DB Pronto");
-            } catch (e) { console.error("Errore caricamento"); }
+                const r = await fetch('data.json');
+                db = await r.json();
+                document.getElementById('stat').innerText = `${db.length} RECORDS READY`;
+            } catch (e) { document.getElementById('stat').innerText = "DB ERROR"; }
         }
 
-        function filtraDati() {
-            const query = document.getElementById('search').value.toUpperCase().trim();
+        function runSearch() {
+            const q = document.getElementById('search').value.toUpperCase().trim();
             const container = document.getElementById('results');
             container.innerHTML = "";
+            if (q.length < 2) return;
 
-            if (query.length < 2) return;
+            // RICERCA ROBUSTA (Cerca sia 'icao' che 'ICAO' che 'Icao')
+            const filtered = db.filter(item => {
+                // Estraiamo i valori indipendentemente dalle maiuscole nel JSON
+                const icao = (item.icao || item.ICAO || item.Icao || "").toString().toUpperCase().trim();
+                const comp = (item.company || item.Company || "").toString().toUpperCase().trim();
+                const call = (item.callsign || item.Callsign || "").toString().toUpperCase().trim();
 
-            // --- LOGICA DI FILTRAGGIO A CASCATA ---
-            
-            // 1. Cerca il Match ESATTO dell'ICAO (es. ITY deve essere uguale a ITY)
-            const matchEsattoICAO = database.filter(item => 
-                (item.icao || "").toUpperCase().trim() === query
-            );
-
-            // 2. Cerca Match Parziali (ICAO che inizia con la query, Nome o Callsign che contengono la query)
-            // Escludiamo però quello che abbiamo già trovato nel punto 1
-            const matchParziali = database.filter(item => {
-                const icao = (item.icao || "").toUpperCase().trim();
-                const comp = (item.company || "").toUpperCase().trim();
-                const call = (item.callsign || "").toUpperCase().trim();
-                
-                // Se è già un match esatto ICAO, lo saltiamo (è già in matchEsattoICAO)
-                if (icao === query) return false; 
-                
-                return icao.startsWith(query) || comp.includes(query) || call.includes(query);
+                return icao.includes(q) || comp.includes(q) || call.includes(q);
             });
 
-            // Uniamo le liste: Prima gli esatti, poi i parziali
-            const risultatiFinali = [...matchEsattoICAO, ...matchParziali].slice(0, 20);
+            // ORDINAMENTO DINAMICO
+            filtered.sort((a, b) => {
+                const aIcao = (a.icao || a.ICAO || a.Icao || "").toString().toUpperCase().trim();
+                const bIcao = (b.icao || b.ICAO || b.Icao || "").toString().toUpperCase().trim();
+                
+                // Se è un match esatto (es. "RYR" === "RYR"), mettilo per primo
+                if (aIcao === q) return -1;
+                if (bIcao === q) return 1;
+                // Altrimenti ordine alfabetico
+                return aIcao.localeCompare(bIcao);
+            });
 
-            if (risultatiFinali.length === 0) {
-                container.innerHTML = '<div class="no-results">Nessun codice trovato.</div>';
-                return;
-            }
+            filtered.slice(0, 20).forEach(item => {
+                const valIcao = (item.icao || item.ICAO || item.Icao || "---").toUpperCase().trim();
+                const valComp = (item.company || item.Company || "Unknown");
+                const valCall = (item.callsign || item.Callsign || "No Callsign");
+                
+                const isExact = valIcao === q;
 
-            risultatiFinali.forEach(item => {
-                const isExact = (item.icao || "").toUpperCase().trim() === query;
                 container.innerHTML += `
-                    <div class="card ${isExact ? 'match-icao' : ''}">
-                        <div class="company">${item.company}</div>
-                        <div class="icao">${item.icao}</div>
-                        <div class="callsign">🎙️ ${item.callsign}</div>
+                    <div class="card ${isExact ? 'match-exact' : ''}">
+                        <div class="company">${valComp}</div>
+                        <div class="icao-code">${valIcao}</div>
+                        <div class="callsign">🎙️ ${valCall}</div>
                     </div>`;
             });
         }
 
-        function pulisci() {
+        function resetSearch() {
             document.getElementById('search').value = "";
             document.getElementById('results').innerHTML = "";
             document.getElementById('search').focus();
