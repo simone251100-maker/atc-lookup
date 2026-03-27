@@ -3,52 +3,146 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ATC Radar</title>
+    <title>ATC Radar Lookup</title>
+    <link rel="apple-touch-icon" href="icon.png">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-               background: #000; color: #fff; margin: 0; padding: 20px; }
-        .search-container { position: sticky; top: 0; background: #000; padding-bottom: 15px; }
-        input { width: 100%; padding: 16px; border-radius: 12px; border: 1px solid #333; 
-                background: #1c1c1e; color: white; font-size: 18px; box-sizing: border-box; }
-        .card { background: #1c1c1e; padding: 15px; border-radius: 12px; margin-bottom: 10px; 
-                border-left: 4px solid #0a84ff; animation: fadeIn 0.3s ease; }
-        .icao { color: #0a84ff; font-weight: bold; font-family: monospace; font-size: 20px; }
-        .company { font-size: 16px; margin-bottom: 4px; color: #efeff4; }
-        .callsign { color: #30d158; font-style: italic; font-size: 14px; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
+        :root {
+            --bg: #000000;
+            --card: #1c1c1e;
+            --primary: #0a84ff;
+            --success: #30d158;
+            --text: #ffffff;
+            --secondary-text: #8e8e93;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            margin: 0; 
+            padding: env(safe-area-inset-top) 15px 20px 15px;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .header {
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            padding: 10px 0 15px 0;
+            z-index: 100;
+        }
+
+        h2 { margin: 5px 0 15px 0; font-weight: 700; font-size: 22px; }
+
+        .search-box {
+            position: relative;
+            display: flex;
+            gap: 10px;
+        }
+
+        input { 
+            flex: 1;
+            padding: 14px 16px; 
+            border-radius: 12px; 
+            border: 1px solid #333; 
+            background: var(--card); 
+            color: white; 
+            font-size: 17px; 
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        .btn-clear {
+            padding: 0 15px;
+            background: var(--card);
+            border: 1px solid #333;
+            border-radius: 12px;
+            color: var(--secondary-text);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        #results { margin-top: 10px; }
+
+        .card { 
+            background: var(--card); 
+            padding: 16px; 
+            border-radius: 14px; 
+            margin-bottom: 12px; 
+            border-left: 5px solid var(--primary);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            animation: slideUp 0.2s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .company { font-size: 14px; color: var(--secondary-text); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .icao { font-size: 24px; font-weight: 800; font-family: 'SF Mono', monospace; color: var(--primary); margin-bottom: 2px; }
+        .callsign { font-size: 16px; color: var(--success); font-style: italic; font-weight: 500; }
+
+        .no-results { text-align: center; color: var(--secondary-text); margin-top: 40px; }
     </style>
 </head>
 <body>
-    <div class="search-container">
-        <h2 style="margin-top:0">✈️ ATC Lookup</h2>
-        <input type="text" id="search" placeholder="Inserisci ICAO o Nome..." oninput="cerca()">
+
+    <div class="header">
+        <h2>✈️ ATC Lookup</h2>
+        <div class="search-box">
+            <input type="text" id="search" placeholder="Cerca ICAO (es. ITY)..." autocomplete="off" oninput="eseguiRicerca()">
+            <button class="btn-clear" onclick="pulisci()">Reset</button>
+        </div>
     </div>
+
     <div id="results"></div>
 
     <script>
         let database = [];
 
-        // Carica il database unico
+        // Caricamento database
         async function init() {
-            const res = await fetch('data.json');
-            database = await res.json();
+            try {
+                const res = await fetch('data.json');
+                database = await res.json();
+                console.log("Database caricato con successo");
+            } catch (e) {
+                console.error("Errore caricamento dati:", e);
+            }
         }
 
-        function cerca() {
-            const q = document.getElementById('search').value.toUpperCase().trim();
-            const resDiv = document.getElementById('results');
-            resDiv.innerHTML = "";
-            if (q.length < 2) return;
+        function eseguiRicerca() {
+            const query = document.getElementById('search').value.toUpperCase().trim();
+            const container = document.getElementById('results');
+            container.innerHTML = "";
 
-            // Filtro: prima ICAO esatto, poi il resto
-            const filtrati = database.filter(item => 
-                item.icao.toUpperCase() === q || 
-                item.company.toUpperCase().includes(q) ||
-                item.callsign.toUpperCase().includes(q)
-            ).slice(0, 20);
+            if (query.length < 2) return;
 
-            filtrati.forEach(item => {
-                resDiv.innerHTML += `
+            // 1. MATCH ESATTO ICAO (Priorità Massima)
+            const matchEsatto = database.filter(item => item.icao.toUpperCase() === query);
+
+            // 2. MATCH PARZIALI (Inizia con l'input o contiene l'input)
+            const matchParziali = database.filter(item => 
+                item.icao.toUpperCase() !== query && (
+                    item.icao.toUpperCase().includes(query) || 
+                    item.company.toUpperCase().includes(query) || 
+                    item.callsign.toUpperCase().includes(query)
+                )
+            ).slice(0, 15);
+
+            // Unione risultati
+            const finali = [...matchEsatto, ...matchParziali];
+
+            if (finali.length === 0) {
+                container.innerHTML = '<div class="no-results">Nessuna compagnia trovata.</div>';
+                return;
+            }
+
+            finali.forEach(item => {
+                container.innerHTML += `
                     <div class="card">
                         <div class="company">${item.company}</div>
                         <div class="icao">${item.icao}</div>
@@ -56,6 +150,14 @@
                     </div>`;
             });
         }
+
+        function pulisci() {
+            document.getElementById('search').value = "";
+            document.getElementById('results').innerHTML = "";
+            document.getElementById('search').focus();
+        }
+
+        // Avvio app
         init();
     </script>
 </body>
