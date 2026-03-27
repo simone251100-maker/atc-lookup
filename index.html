@@ -3,35 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ATC Radar Pro</title>
+    <title>ATC Radar Precision</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.png">
     <style>
         :root { --bg: #000; --card: #1c1c1e; --primary: #0a84ff; --success: #30d158; --text: #fff; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: env(safe-area-inset-top) 15px 20px 15px; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: env(safe-area-inset-top) 15px 20px 15px; overflow-x: hidden; }
         .header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 15px 0; z-index: 10; border-bottom: 1px solid #222; }
         .search-box { display: flex; gap: 8px; margin-top: 10px; }
         input { flex: 1; padding: 16px; border-radius: 12px; border: 1px solid #333; background: var(--card); color: #fff; font-size: 18px; outline: none; -webkit-appearance: none; }
         .btn-clear { padding: 0 15px; background: #2c2c2e; border: none; border-radius: 12px; color: #8e8e93; font-weight: 600; }
-        .card { background: var(--card); padding: 18px; border-radius: 16px; margin-bottom: 10px; border-left: 6px solid #333; }
-        .match-exact { border-left-color: var(--primary); background: #1c2530; }
-        .company { font-size: 12px; color: #8e8e93; text-transform: uppercase; margin-bottom: 2px; }
-        .icao-code { font-size: 30px; font-weight: 900; font-family: monospace; color: var(--primary); }
-        .callsign { font-size: 20px; color: var(--success); font-weight: 700; margin-top: 4px; }
-        .info-db { font-size: 10px; color: #444; text-align: right; }
+        .card { background: var(--card); padding: 20px; border-radius: 16px; margin-top: 15px; border-left: 6px solid var(--primary); box-shadow: 0 4px 20px rgba(0,0,0,0.6); }
+        .company { font-size: 13px; color: #8e8e93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .icao-code { font-size: 35px; font-weight: 900; font-family: monospace; color: var(--primary); line-height: 1; }
+        .callsign { font-size: 22px; color: var(--success); font-weight: 700; margin-top: 8px; border-top: 1px solid #333; padding-top: 8px; }
+        .no-results { text-align: center; color: #444; margin-top: 50px; font-style: italic; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h2 style="margin:0">✈️ ATC Radar</h2>
-            <div id="stat" class="info-db">Sync...</div>
-        </div>
+        <h2 style="margin:0">✈️ ATC Radar</h2>
         <div class="search-box">
-            <input type="text" id="search" placeholder="Inserisci ICAO (es. ITY, RYR)" autocomplete="off" oninput="runSearch()">
-            <button class="btn-clear" onclick="resetSearch()">Reset</button>
+            <input type="text" id="search" placeholder="Inserisci ICAO (ITY, RYR...)" autocomplete="off" oninput="filtraSenzaErrori()">
+            <button class="btn-clear" onclick="pulisci()">Reset</button>
         </div>
     </div>
 
@@ -44,53 +40,46 @@
             try {
                 const r = await fetch('data.json');
                 db = await r.json();
-                document.getElementById('stat').innerText = `${db.length} RECORDS`;
-            } catch (e) { document.getElementById('stat').innerText = "DB ERROR"; }
+            } catch (e) { console.error("Errore DB"); }
         }
 
-        // FUNZIONE SCANNER UNIVERSALE
-        function getVal(obj, keys) {
-            for (let k of keys) {
-                if (obj[k]) return obj[k].toString().trim();
-                if (obj[k.toUpperCase()]) return obj[k.toUpperCase()].toString().trim();
-                if (obj[k.toLowerCase()]) return obj[k.toLowerCase()].toString().trim();
-            }
-            return "";
-        }
-
-        function runSearch() {
+        function filtraSenzaErrori() {
             const q = document.getElementById('search').value.toUpperCase().trim();
             const container = document.getElementById('results');
             container.innerHTML = "";
+
             if (q.length < 2) return;
 
-            const filtered = db.filter(item => {
-                // Cerchiamo l'ICAO in ogni possibile variante di nome chiave
-                const icao = getVal(item, ['icao', 'ICAO', 'code', 'airline_icao']);
-                const comp = getVal(item, ['company', 'name', 'airline', 'airline_name']);
-                const call = getVal(item, ['callsign', 'telephony', 'radio']);
+            // --- LOGICA RESTRITTIVA ---
+            let filtrati = [];
 
-                return icao.toUpperCase() === q || icao.toUpperCase().includes(q) || 
-                       comp.toUpperCase().includes(q) || call.toUpperCase().includes(q);
-            });
+            if (q.length === 3) {
+                // Se scrivi 3 lettere, cerca SOLO l'ICAO identico
+                filtrati = db.filter(item => {
+                    const code = (item.icao || item.ICAO || "").toString().toUpperCase().trim();
+                    return code === q;
+                });
+            } else {
+                // Se scrivi più o meno di 3 lettere, cerca nel nome compagnia
+                filtrati = db.filter(item => {
+                    const name = (item.company || item.Company || "").toString().toUpperCase();
+                    const call = (item.callsign || item.Callsign || "").toString().toUpperCase();
+                    return name.includes(q) || call.includes(q);
+                });
+            }
 
-            // Ordinamento: Match Esatto ICAO sempre primo
-            filtered.sort((a, b) => {
-                const aIcao = getVal(a, ['icao', 'ICAO', 'code']).toUpperCase();
-                const bIcao = getVal(b, ['icao', 'ICAO', 'code']).toUpperCase();
-                if (aIcao === q) return -1;
-                if (bIcao === q) return 1;
-                return 0;
-            });
+            if (filtrati.length === 0) {
+                container.innerHTML = '<div class="no-results">Nessun match esatto per ' + q + '</div>';
+                return;
+            }
 
-            filtered.slice(0, 15).forEach(item => {
-                const vIcao = getVal(item, ['icao', 'ICAO', 'code']).toUpperCase() || "---";
-                const vComp = getVal(item, ['company', 'name', 'airline']) || "Unknown";
-                const vCall = getVal(item, ['callsign', 'telephony', 'radio']) || "N/A";
-                const isExact = vIcao === q;
+            filtrati.forEach(item => {
+                const vIcao = (item.icao || item.ICAO || "---").toUpperCase().trim();
+                const vComp = (item.company || item.Company || "Unknown");
+                const vCall = (item.callsign || item.Callsign || "No Radio");
 
                 container.innerHTML += `
-                    <div class="card ${isExact ? 'match-exact' : ''}">
+                    <div class="card">
                         <div class="company">${vComp}</div>
                         <div class="icao-code">${vIcao}</div>
                         <div class="callsign">🎙️ ${vCall}</div>
@@ -98,7 +87,7 @@
             });
         }
 
-        function resetSearch() {
+        function pulisci() {
             document.getElementById('search').value = "";
             document.getElementById('results').innerHTML = "";
             document.getElementById('search').focus();
