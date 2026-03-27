@@ -2,30 +2,36 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ATC Radar Lookup</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ATC Radar</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon.png">
     <style>
         :root { --bg: #000; --card: #1c1c1e; --primary: #0a84ff; --success: #30d158; --text: #fff; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        .header { position: sticky; top: 0; background: var(--bg); padding-bottom: 15px; z-index: 10; }
-        .search-box { display: flex; gap: 10px; }
-        input { flex: 1; padding: 15px; border-radius: 12px; border: 1px solid #333; background: var(--card); color: #fff; font-size: 18px; outline: none; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: env(safe-area-inset-top) 15px 20px 15px; }
+        .header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 15px 0; z-index: 10; }
+        .search-box { display: flex; gap: 8px; }
+        input { flex: 1; padding: 16px; border-radius: 12px; border: 1px solid #333; background: var(--card); color: #fff; font-size: 18px; outline: none; -webkit-appearance: none; }
         input:focus { border-color: var(--primary); }
-        .btn-clear { padding: 0 15px; background: var(--card); border: 1px solid #333; border-radius: 12px; color: #8e8e93; }
-        .card { background: var(--card); padding: 16px; border-radius: 14px; margin-bottom: 12px; border-left: 5px solid var(--primary); }
-        .company { font-size: 13px; color: #8e8e93; text-transform: uppercase; margin-bottom: 4px; }
-        .icao { font-size: 26px; font-weight: 800; font-family: monospace; color: var(--primary); }
-        .callsign { font-size: 17px; color: var(--success); font-style: italic; margin-top: 5px; }
-        .status { font-size: 12px; color: #444; margin-bottom: 10px; }
+        .btn-clear { padding: 0 15px; background: #2c2c2e; border: none; border-radius: 12px; color: #8e8e93; font-weight: 600; }
+        
+        /* Card migliorata per lettura rapida */
+        .card { background: var(--card); padding: 18px; border-radius: 16px; margin-bottom: 10px; border-left: 6px solid #333; transition: border 0.2s; }
+        .match-icao { border-left-color: var(--primary); background: #1c2530; } /* Evidenzia il match esatto */
+        
+        .company { font-size: 12px; color: #8e8e93; text-transform: uppercase; margin-bottom: 2px; }
+        .icao { font-size: 28px; font-weight: 900; font-family: monospace; color: var(--primary); }
+        .callsign { font-size: 19px; color: var(--success); font-weight: 600; margin-top: 4px; }
+        .no-results { text-align: center; color: #444; margin-top: 30px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h2>✈️ ATC Lookup</h2>
-        <div id="db-status" class="status">Caricamento database...</div>
+        <h2 style="margin:5px 0 15px 0">✈️ ATC Radar</h2>
         <div class="search-box">
-            <input type="text" id="search" placeholder="Inserisci ICAO (es. ITY)" autocomplete="off" oninput="cerca()">
+            <input type="text" id="search" placeholder="Inserisci ICAO (es. ITY)" autocomplete="off" oninput="filtraDati()">
             <button class="btn-clear" onclick="pulisci()">Reset</button>
         </div>
     </div>
@@ -39,48 +45,49 @@
             try {
                 const res = await fetch('data.json');
                 database = await res.json();
-                document.getElementById('db-status').innerText = `Database pronto: ${database.length} record.`;
-            } catch (e) {
-                document.getElementById('db-status').innerText = "Errore caricamento data.json!";
-            }
+                console.log("DB Pronto");
+            } catch (e) { console.error("Errore caricamento"); }
         }
 
-        function cerca() {
+        function filtraDati() {
             const query = document.getElementById('search').value.toUpperCase().trim();
             const container = document.getElementById('results');
             container.innerHTML = "";
 
             if (query.length < 2) return;
 
-            // FILTRO ULTRA-PRECISO
-            // Usiamo .trim() su ogni campo del database per eliminare spazi nascosti
-            const risultati = database.filter(item => {
+            // --- LOGICA DI FILTRAGGIO A CASCATA ---
+            
+            // 1. Cerca il Match ESATTO dell'ICAO (es. ITY deve essere uguale a ITY)
+            const matchEsattoICAO = database.filter(item => 
+                (item.icao || "").toUpperCase().trim() === query
+            );
+
+            // 2. Cerca Match Parziali (ICAO che inizia con la query, Nome o Callsign che contengono la query)
+            // Escludiamo però quello che abbiamo già trovato nel punto 1
+            const matchParziali = database.filter(item => {
                 const icao = (item.icao || "").toUpperCase().trim();
                 const comp = (item.company || "").toUpperCase().trim();
                 const call = (item.callsign || "").toUpperCase().trim();
-
-                // 1. Priorità: Match ESATTO dell'ICAO
-                if (icao === query) return true;
                 
-                // 2. Seconda scelta: ICAO che inizia con la query o nome che contiene la query
+                // Se è già un match esatto ICAO, lo saltiamo (è già in matchEsattoICAO)
+                if (icao === query) return false; 
+                
                 return icao.startsWith(query) || comp.includes(query) || call.includes(query);
             });
 
-            // ORDINA I RISULTATI: Metti i match ICAO esatti in cima
-            risultati.sort((a, b) => {
-                if (a.icao.toUpperCase().trim() === query) return -1;
-                if (b.icao.toUpperCase().trim() === query) return 1;
-                return 0;
-            });
+            // Uniamo le liste: Prima gli esatti, poi i parziali
+            const risultatiFinali = [...matchEsattoICAO, ...matchParziali].slice(0, 20);
 
-            if (risultati.length === 0) {
-                container.innerHTML = '<div style="color:#666; text-align:center; margin-top:20px;">Nessun risultato.</div>';
+            if (risultatiFinali.length === 0) {
+                container.innerHTML = '<div class="no-results">Nessun codice trovato.</div>';
                 return;
             }
 
-            risultati.slice(0, 20).forEach(item => {
+            risultatiFinali.forEach(item => {
+                const isExact = (item.icao || "").toUpperCase().trim() === query;
                 container.innerHTML += `
-                    <div class="card">
+                    <div class="card ${isExact ? 'match-icao' : ''}">
                         <div class="company">${item.company}</div>
                         <div class="icao">${item.icao}</div>
                         <div class="callsign">🎙️ ${item.callsign}</div>
