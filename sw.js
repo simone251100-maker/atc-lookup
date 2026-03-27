@@ -1,22 +1,25 @@
 const CACHE_NAME = 'atc-radar-v1';
 const ASSETS = [
-  './',
-  './index.html',
-  './data.json',
-  './icon.png',
-  './manifest.json'
+  'index.html',
+  'data.json',
+  'icon.png',
+  'manifest.json'
 ];
 
-// Installa il Service Worker e salva i file in cache
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+// Installa e metti in cache
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS);
+    })
   );
 });
 
-// Controlla se ci sono aggiornamenti ogni volta che apri l'app
-self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+// Rispondi dalle risorse in cache o vai in rete
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
+    })
   );
 });
