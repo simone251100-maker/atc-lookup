@@ -3,30 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ATC Radar Precision</title>
+    <title>ATC Radar Pro</title>
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ATC Radar">
+    
     <link rel="apple-touch-icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+
     <style>
-        :root { --bg: #000; --card: #1c1c1e; --primary: #0a84ff; --success: #30d158; --text: #fff; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: env(safe-area-inset-top) 15px 20px 15px; overflow-x: hidden; }
-        .header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 15px 0; z-index: 10; border-bottom: 1px solid #222; }
-        .search-box { display: flex; gap: 8px; margin-top: 10px; }
-        input { flex: 1; padding: 16px; border-radius: 12px; border: 1px solid #333; background: var(--card); color: #fff; font-size: 18px; outline: none; -webkit-appearance: none; }
-        .btn-clear { padding: 0 15px; background: #2c2c2e; border: none; border-radius: 12px; color: #8e8e93; font-weight: 600; }
-        .card { background: var(--card); padding: 20px; border-radius: 16px; margin-top: 15px; border-left: 6px solid var(--primary); box-shadow: 0 4px 20px rgba(0,0,0,0.6); }
-        .company { font-size: 13px; color: #8e8e93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-        .icao-code { font-size: 35px; font-weight: 900; font-family: monospace; color: var(--primary); line-height: 1; }
-        .callsign { font-size: 22px; color: var(--success); font-weight: 700; margin-top: 8px; border-top: 1px solid #333; padding-top: 8px; }
+        :root { 
+            --bg: #000; 
+            --card: #1c1c1e; 
+            --primary: #0a84ff; 
+            --success: #30d158; 
+            --text: #fff; 
+            --border: #333;
+        }
+
+        body { 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            margin: 0; 
+            padding: env(safe-area-inset-top) 15px 20px 15px;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .header { 
+            position: sticky; 
+            top: 0; 
+            background: var(--bg); 
+            padding: 10px 0 15px 0; 
+            z-index: 10; 
+            border-bottom: 1px solid #222;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .info-db { font-size: 10px; color: #555; font-weight: 600; letter-spacing: 0.5px; }
+
+        .search-box { display: flex; gap: 8px; }
+
+        input { 
+            flex: 1; 
+            padding: 16px; 
+            border-radius: 12px; 
+            border: 1px solid var(--border); 
+            background: var(--card); 
+            color: #fff; 
+            font-size: 18px; 
+            outline: none; 
+            -webkit-appearance: none;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        .btn-clear { 
+            padding: 0 15px; 
+            background: #2c2c2e; 
+            border: none; 
+            border-radius: 12px; 
+            color: #8e8e93; 
+            font-weight: 600;
+        }
+
+        #results { margin-top: 5px; }
+
+        .card { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 16px; 
+            margin-top: 15px; 
+            border-left: 6px solid var(--primary); 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .company { font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .icao-code { font-size: 38px; font-weight: 900; font-family: 'SF Mono', monospace; color: var(--primary); line-height: 1; }
+        .callsign { font-size: 22px; color: var(--success); font-weight: 700; margin-top: 10px; border-top: 1px solid #333; padding-top: 10px; font-style: italic; }
+        
         .no-results { text-align: center; color: #444; margin-top: 50px; font-style: italic; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h2 style="margin:0">Callsign list      Created By Simone</h2>
+        <div class="status-bar">
+            <h2 style="margin:0; font-size: 20px;">✈️ ATC Radar</h2>
+            <div id="stat" class="info-db">SYNCING...</div>
+        </div>
         <div class="search-box">
-            <input type="text" id="search" placeholder="Inserisci ICAO (ITY, RYR...)" autocomplete="off" oninput="filtraSenzaErrori()">
+            <input type="text" id="search" placeholder="Inserisci ICAO (ITY, RYR...)" autocomplete="off" oninput="runSearch()">
             <button class="btn-clear" onclick="pulisci()">Reset</button>
         </div>
     </div>
@@ -34,49 +115,66 @@
     <div id="results"></div>
 
     <script>
-        let db = [];
-
-        async function init() {
-            try {
-                const r = await fetch('data.json');
-                db = await r.json();
-            } catch (e) { console.error("Errore DB"); }
+        // 1. Registrazione Service Worker per aggiornamenti automatici
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
         }
 
-        function filtraSenzaErrori() {
-            const q = document.getElementById('search').value.toUpperCase().trim();
+        let database = [];
+
+        // 2. Caricamento Dati con protezione Cache
+        async function init() {
+            try {
+                // Il parametro ?v= forza GitHub a scaricare il file nuovo ogni volta
+                const response = await fetch('data.json?v=' + Date.now());
+                database = await response.json();
+                document.getElementById('stat').innerText = `${database.length} AIRLINES READY`;
+            } catch (e) { 
+                document.getElementById('stat').innerText = "OFFLINE MODE"; 
+            }
+        }
+
+        // 3. Funzione di Ricerca di Precisione
+        function runSearch() {
+            const query = document.getElementById('search').value.toUpperCase().trim();
             const container = document.getElementById('results');
             container.innerHTML = "";
 
-            if (q.length < 2) return;
+            if (query.length < 2) return;
 
-            // --- LOGICA RESTRITTIVA ---
-            let filtrati = [];
+            let risultati = [];
 
-            if (q.length === 3) {
-                // Se scrivi 3 lettere, cerca SOLO l'ICAO identico
-                filtrati = db.filter(item => {
+            // Se la query è di 3 lettere (ICAO Standard), cerca il match ESATTO
+            if (query.length === 3) {
+                risultati = database.filter(item => {
                     const code = (item.icao || item.ICAO || "").toString().toUpperCase().trim();
-                    return code === q;
+                    return code === query;
                 });
-            } else {
-                // Se scrivi più o meno di 3 lettere, cerca nel nome compagnia
-                filtrati = db.filter(item => {
+                
+                // Vibrazione se trova il match esatto (solo su dispositivi supportati)
+                if (risultati.length > 0 && window.navigator.vibrate) {
+                    window.navigator.vibrate(50);
+                }
+            } 
+            // Se la query è diversa da 3 lettere, cerca nel nome o callsign
+            else {
+                risultati = database.filter(item => {
                     const name = (item.company || item.Company || "").toString().toUpperCase();
                     const call = (item.callsign || item.Callsign || "").toString().toUpperCase();
-                    return name.includes(q) || call.includes(q);
+                    return name.includes(query) || call.includes(query);
                 });
             }
 
-            if (filtrati.length === 0) {
-                container.innerHTML = '<div class="no-results">Nessun match esatto per ' + q + '</div>';
+            if (risultati.length === 0) {
+                container.innerHTML = `<div class="no-results">Nessuna compagnia per "${query}"</div>`;
                 return;
             }
 
-            filtrati.forEach(item => {
+            // Mostra i risultati (limitati a 15 per velocità)
+            risultati.slice(0, 15).forEach(item => {
                 const vIcao = (item.icao || item.ICAO || "---").toUpperCase().trim();
-                const vComp = (item.company || item.Company || "Unknown");
-                const vCall = (item.callsign || item.Callsign || "No Radio");
+                const vComp = (item.company || item.Company || "Unknown Airline");
+                const vCall = (item.callsign || item.Callsign || "No Callsign");
 
                 container.innerHTML += `
                     <div class="card">
@@ -93,6 +191,7 @@
             document.getElementById('search').focus();
         }
 
+        // Avvio
         init();
     </script>
 </body>
