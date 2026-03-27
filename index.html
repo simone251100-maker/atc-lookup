@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ATC Radar</title>
+    <title>ATC Radar Pro</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.png">
@@ -13,14 +13,13 @@
         .header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 15px 0; z-index: 10; border-bottom: 1px solid #222; }
         .search-box { display: flex; gap: 8px; margin-top: 10px; }
         input { flex: 1; padding: 16px; border-radius: 12px; border: 1px solid #333; background: var(--card); color: #fff; font-size: 18px; outline: none; -webkit-appearance: none; }
-        input:focus { border-color: var(--primary); }
         .btn-clear { padding: 0 15px; background: #2c2c2e; border: none; border-radius: 12px; color: #8e8e93; font-weight: 600; }
         .card { background: var(--card); padding: 18px; border-radius: 16px; margin-bottom: 10px; border-left: 6px solid #333; }
         .match-exact { border-left-color: var(--primary); background: #1c2530; }
         .company { font-size: 12px; color: #8e8e93; text-transform: uppercase; margin-bottom: 2px; }
         .icao-code { font-size: 30px; font-weight: 900; font-family: monospace; color: var(--primary); }
         .callsign { font-size: 20px; color: var(--success); font-weight: 700; margin-top: 4px; }
-        .info-db { font-size: 10px; color: #444; text-align: right; margin-bottom: 5px; }
+        .info-db { font-size: 10px; color: #444; text-align: right; }
     </style>
 </head>
 <body>
@@ -28,10 +27,10 @@
     <div class="header">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <h2 style="margin:0">✈️ ATC Radar</h2>
-            <div id="stat" class="info-db">Loading...</div>
+            <div id="stat" class="info-db">Sync...</div>
         </div>
         <div class="search-box">
-            <input type="text" id="search" placeholder="Cerca ICAO (es. RYR)" autocomplete="off" oninput="runSearch()">
+            <input type="text" id="search" placeholder="Inserisci ICAO (es. ITY, RYR)" autocomplete="off" oninput="runSearch()">
             <button class="btn-clear" onclick="resetSearch()">Reset</button>
         </div>
     </div>
@@ -45,8 +44,18 @@
             try {
                 const r = await fetch('data.json');
                 db = await r.json();
-                document.getElementById('stat').innerText = `${db.length} RECORDS READY`;
+                document.getElementById('stat').innerText = `${db.length} RECORDS`;
             } catch (e) { document.getElementById('stat').innerText = "DB ERROR"; }
+        }
+
+        // FUNZIONE SCANNER UNIVERSALE
+        function getVal(obj, keys) {
+            for (let k of keys) {
+                if (obj[k]) return obj[k].toString().trim();
+                if (obj[k.toUpperCase()]) return obj[k.toUpperCase()].toString().trim();
+                if (obj[k.toLowerCase()]) return obj[k.toLowerCase()].toString().trim();
+            }
+            return "";
         }
 
         function runSearch() {
@@ -55,40 +64,36 @@
             container.innerHTML = "";
             if (q.length < 2) return;
 
-            // RICERCA ROBUSTA (Cerca sia 'icao' che 'ICAO' che 'Icao')
             const filtered = db.filter(item => {
-                // Estraiamo i valori indipendentemente dalle maiuscole nel JSON
-                const icao = (item.icao || item.ICAO || item.Icao || "").toString().toUpperCase().trim();
-                const comp = (item.company || item.Company || "").toString().toUpperCase().trim();
-                const call = (item.callsign || item.Callsign || "").toString().toUpperCase().trim();
+                // Cerchiamo l'ICAO in ogni possibile variante di nome chiave
+                const icao = getVal(item, ['icao', 'ICAO', 'code', 'airline_icao']);
+                const comp = getVal(item, ['company', 'name', 'airline', 'airline_name']);
+                const call = getVal(item, ['callsign', 'telephony', 'radio']);
 
-                return icao.includes(q) || comp.includes(q) || call.includes(q);
+                return icao.toUpperCase() === q || icao.toUpperCase().includes(q) || 
+                       comp.toUpperCase().includes(q) || call.toUpperCase().includes(q);
             });
 
-            // ORDINAMENTO DINAMICO
+            // Ordinamento: Match Esatto ICAO sempre primo
             filtered.sort((a, b) => {
-                const aIcao = (a.icao || a.ICAO || a.Icao || "").toString().toUpperCase().trim();
-                const bIcao = (b.icao || b.ICAO || b.Icao || "").toString().toUpperCase().trim();
-                
-                // Se è un match esatto (es. "RYR" === "RYR"), mettilo per primo
+                const aIcao = getVal(a, ['icao', 'ICAO', 'code']).toUpperCase();
+                const bIcao = getVal(b, ['icao', 'ICAO', 'code']).toUpperCase();
                 if (aIcao === q) return -1;
                 if (bIcao === q) return 1;
-                // Altrimenti ordine alfabetico
-                return aIcao.localeCompare(bIcao);
+                return 0;
             });
 
-            filtered.slice(0, 20).forEach(item => {
-                const valIcao = (item.icao || item.ICAO || item.Icao || "---").toUpperCase().trim();
-                const valComp = (item.company || item.Company || "Unknown");
-                const valCall = (item.callsign || item.Callsign || "No Callsign");
-                
-                const isExact = valIcao === q;
+            filtered.slice(0, 15).forEach(item => {
+                const vIcao = getVal(item, ['icao', 'ICAO', 'code']).toUpperCase() || "---";
+                const vComp = getVal(item, ['company', 'name', 'airline']) || "Unknown";
+                const vCall = getVal(item, ['callsign', 'telephony', 'radio']) || "N/A";
+                const isExact = vIcao === q;
 
                 container.innerHTML += `
                     <div class="card ${isExact ? 'match-exact' : ''}">
-                        <div class="company">${valComp}</div>
-                        <div class="icao-code">${valIcao}</div>
-                        <div class="callsign">🎙️ ${valCall}</div>
+                        <div class="company">${vComp}</div>
+                        <div class="icao-code">${vIcao}</div>
+                        <div class="callsign">🎙️ ${vCall}</div>
                     </div>`;
             });
         }
